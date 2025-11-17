@@ -1,2 +1,2 @@
-# Kanban
-Kanban task manager made with the MERN stack
+# RateEverything
+A website built using the MERN stack to rate literally ANYTHING
