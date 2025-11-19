@@ -1,6 +1,6 @@
 import { useEffect, useState, useContext } from "react";
 import { useParams } from "react-router-dom";
-import { getItem, addReview } from "../api/items";
+import { getItem, addReview, deleteReview } from "../api/items";
 import RatingStars from "../components/RatingStars";
 import { AuthContext } from "../context/AuthContext";
 
@@ -12,10 +12,12 @@ export default function ItemDetails() {
   const [rating, setRating] = useState(0);
   const [review, setReview] = useState("");
 
+  // Load item once
   useEffect(() => {
     getItem(id).then((data) => setItem(data));
   }, [id]);
 
+  // Submit new review
   const submitReview = async () => {
     if (!rating || !review.trim()) {
       alert("Enter rating + review text");
@@ -35,27 +37,37 @@ export default function ItemDetails() {
     setReview("");
   };
 
-  if (!item) return <div className="p-6">Loading...</div>;
+  // Delete a specific review
+  const handleDelete = async (reviewId) => {
+    await deleteReview(item._id, reviewId);
+    const updated = await getItem(id);
+    setItem(updated);
+  };
+
+  if (!item) return <div className="p-6 text-white">Loading...</div>;
 
   return (
     <div className="p-6 max-w-2xl mx-auto text-white">
 
-      {/* Item heading */}
-          <h1 className="text-3xl font-bold mb-4">{item.name}</h1>
-      
-          {/* Image */}
-          {item.imageUrl && (
-            <img
-              src={item.imageUrl}
-              alt="item"
-              className="w-full rounded-lg mb-6"
-            />
-          )}
-      
-          <p className="text-gray-300 mb-2">{item.category}</p>
-          <p className="text-yellow-400 mb-8 text-lg">
-            ⭐ Avg Rating: {item.averageRating?.toFixed(1) || "No ratings yet"}
-          </p>
+      {/* Item name */}
+      <h1 className="text-3xl font-bold mb-4">{item.name}</h1>
+
+      {/* Image (16:9) */}
+      {item.imageUrl && (
+        <div className="w-full aspect-video mb-6">
+          <img
+            src={item.imageUrl}
+            alt="item"
+            className="w-full h-full object-cover rounded-lg"
+          />
+        </div>
+      )}
+
+      <p className="text-gray-300 mb-2">Category: {item.category}</p>
+
+      <p className="text-yellow-400 mb-8 text-lg">
+        ⭐ Avg Rating: {item.averageRating?.toFixed(1) || "No ratings yet"}
+      </p>
 
       {/* Review form */}
       <div className="p-4 bg-gray-800 rounded-xl mb-8">
@@ -79,23 +91,35 @@ export default function ItemDetails() {
         </button>
       </div>
 
-      {/* Review list */}
+      {/* Reviews list */}
       <h2 className="text-2xl font-semibold mb-4">Reviews</h2>
 
       {item.reviews.length === 0 ? (
         <p className="text-gray-400">No reviews yet.</p>
       ) : (
         <div className="space-y-4">
-          {item.reviews.map((r, i) => (
-            <div key={i} className="p-4 bg-gray-800 rounded-lg">
-              <div className="flex justify-between">
+          {item.reviews.map((r) => (
+            <div key={r._id} className="p-4 bg-gray-800 rounded-lg">
+
+              {/* Header row: username + rating */}
+              <div className="flex justify-between items-center">
                 <span className="font-semibold text-blue-300">{r.username}</span>
                 <span className="text-yellow-400">⭐ {r.rating}</span>
               </div>
 
               <p className="mt-2 text-gray-200">{r.review}</p>
 
-              {/* Judgement */}
+              {/* DELETE OWN REVIEW */}
+              {user === r.username && (
+                <button
+                  onClick={() => handleDelete(r._id)}
+                  className="text-red-400 text-sm mt-2 hover:text-red-500"
+                >
+                  Delete review
+                </button>
+              )}
+
+              {/* Judgement block */}
               {r.judgement && (
                 <div className="mt-3 p-3 bg-gray-900 rounded-lg border border-gray-700">
                   <p className="text-pink-400 font-semibold">

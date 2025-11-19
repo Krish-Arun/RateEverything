@@ -62,3 +62,28 @@ export const addReview = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+export const deleteReview = async (req, res) => {
+  try {
+    const { itemId, reviewId } = req.params;
+    const { username } = req.user; // from JWT
+
+    const item = await Item.findById(itemId);
+    if (!item) return res.status(404).json({ error: "Item not found" });
+
+    const review = item.reviews.id(reviewId);
+    if (!review) return res.status(404).json({ error: "Review not found" });
+
+    // enforce ownership
+    if (review.username !== username) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    review.deleteOne();  // mongoose way to remove subdoc
+    await item.save();
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
