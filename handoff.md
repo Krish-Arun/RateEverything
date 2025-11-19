@@ -1,254 +1,364 @@
-# 📦 **RateEverything — PROJECT CONTEXT & ARCHITECTURE HANDOFF REPORT**
+# 📦 **RateEverything — Technical Handoff (FULL SPEC)**
 
-## 🎯 **Purpose**
-
-RateEverything is a full-stack MERN project that allows users to:
-
-* Create items (name + category)
-* View all items
-* Rate items (1–5 stars)
-* Leave a written review
-* Automatically analyze each review using a “Judgement Engine”
-* Display all reviews per item, including judgement analysis
-* Track average rating per item
-* Identify each reviewer via a simple username (no authentication)
-
-The entire system is intentionally simple so multiple developers can work without environment or auth overhead.
+This document provides a complete technical overview of the RateEverything MERN project so any teammate / AI assistant can immediately continue development.
 
 ---
 
-# ⚙️ **Tech Stack**
+# 🟪 **1. Project Purpose**
+
+RateEverything is a MERN application that lets authenticated users:
+
+* Create items
+* Upload optional metadata (category, later image URL)
+* View and rate items (1–5 stars)
+* Write reviews with text
+* Automatically generate “judgement” metadata using an internal analysis engine
+* See all reviews for each item
+* Delete (later edit) their own reviews
+
+Now includes **full JWT authentication**.
+
+---
+
+# 🟦 **2. Tech Stack**
 
 ### **Frontend**
 
-* **React 19**
-* **Vite**
-* **React Router DOM 7**
-* **Tailwind CSS 3.4**
-* **Axios**
+* React 19
+* React Router DOM 7
+* Tailwind CSS
+* Axios (with token interceptor)
 
 ### **Backend**
 
-* **Node.js (ESM)**
-* **Express 4**
-* **Mongoose 8**
-* **MongoDB (local instance)**
-* **dotenv**
+* Node.js (ESM modules)
+* Express 4
+* Mongoose 8
+* JWT for authentication
+* bcrypt for password hashing
 
-### **Key Architectural Principle**
+### **Database**
 
-➡️ **Items contain embedded reviews**
-➡️ **Reviews are NOT a separate MongoDB collection**
-➡️ All review information (username, rating, review text, judgement analysis) is stored inside the `Item.reviews[]` array.
+* MongoDB (local)
+* Collections: `users`, `items`
 
 ---
 
-# 🗂 **Directory Structure**
+# 🟩 **3. Directory Structure**
 
 ```
 RateEverything/
 ├── client/
 │   ├── index.html
 │   ├── package.json
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
 │   ├── vite.config.js
 │   └── src/
+│       ├── App.jsx
 │       ├── main.jsx
-│       ├── App.jsx              ← username gating + routes
-│       ├── api/items.js         ← axios API
+│       ├── api/
+│       │   ├── axiosClient.js
+│       │   ├── items.js
+│       │   └── auth.js
+│       ├── context/
+│       │   ├── AuthContext.jsx   (contains context + provider)
 │       ├── components/
+│       │   ├── Navbar.jsx
+│       │   ├── PrivateRoute.jsx
 │       │   └── RatingStars.jsx
 │       └── pages/
+│           ├── Login.jsx
+│           ├── Register.jsx
 │           ├── Home.jsx
 │           ├── AddItem.jsx
-│           ├── ItemDetails.jsx  ← review form + review list
-│           ├── EnterUsername.jsx
+│           ├── ItemDetails.jsx
 │           └── NotFound.jsx
 │
 └── server/
     ├── package.json
     ├── .env.example
     └── src/
-        ├── index.js             ← connects DB + starts server
-        ├── app.js               ← express + CORS + JSON + routes
+        ├── index.js
+        ├── app.js
         ├── config/
         │   └── db.js
         ├── models/
-        │   └── Item.js          ← items + embedded reviews
+        │   ├── User.js
+        │   └── Item.js
         ├── controllers/
-        │   └── itemController.js
+        │   ├── itemController.js
+        │   └── authController.js
+        ├── middleware/
+        │   └── auth.js
         ├── routes/
-        │   └── itemRoutes.js
+        │   ├── itemRoutes.js
+        │   └── authRoutes.js
         └── utils/
-            └── analyzeReview.js ← Judgement Engine
+            └── analyzeReview.js
 ```
 
 ---
 
-# 🧠 **Backend Logic Overview**
+# 🟨 **4. Backend Overview**
 
-## 🟩 Models
+## **4.1 Mongoose Models**
 
-### **Item Model**
+---
 
-Each item contains:
+### **User Model (`User.js`)**
+
+Fields:
 
 ```js
+username: String (unique)
+password: String (hashed with bcrypt)
+```
+
+Methods:
+
+* Hash password on save (`pre("save")`)
+* `comparePassword()` for login authentication
+
+---
+
+### **Item Model (`Item.js`)**
+
+Structure:
+
+```js
+name: String
+category: String
+averageRating: Number (auto-updated)
+reviews: [
+  {
+    username: String,        // from authenticated user
+    rating: Number,          // 1–5
+    review: String,          // text
+    judgement: { ... },      // auto-generated
+    createdAt: Date
+  }
+]
+```
+
+---
+
+### **Judgement Engine (`analyzeReview.js`)**
+
+Given `(review text, star rating)` it determines:
+
+* sentiment
+* exaggeration
+* contradictions
+* emojis
+* category: `"hater" | "enjoyer" | "dramatic" | "emoji_lord" | "exaggerator" | "basic"`
+* full judgement object stored inside each review
+
+Integrated directly in `addReview()`.
+
+---
+
+# 🟥 **5. Backend API**
+
+## **5.1 Auth Routes (`/auth`)**
+
+### `POST /auth/register`
+
+Body:
+
+```json
 {
-  name: String,
-  category: String,
-  averageRating: Number,
-  reviews: [
-    {
-      username: String,
-      rating: Number,
-      review: String,
-      judgement: {
-        judgementText: String,
-        judgementTags: [String],
-        sentimentScore: Number,
-        contradictionDetected: Boolean,
-        stats: { wordCount, charCount, emojiCount, exaggerationCount }
-      },
-      createdAt: Date
-    }
-  ]
+  "username": "abc",
+  "password": "123"
 }
 ```
 
-The `judgement` field is injected by the Judgement Engine.
+Creates a new user (hashed password).
 
 ---
 
-## 🟩 Judgement Engine — `utils/analyzeReview.js`
+### `POST /auth/login`
 
-Given a written review + star rating, this module:
+Body:
 
-* Extracts sentiment
-* Detects emojis, exaggeration words, contradictions
-* Categorizes the review (`hater`, `enjoyer`, `dramatic`, etc.)
-* Assigns a judgement text line + tags
-* Returns a structured judgement object stored inside the review.
+```json
+{
+  "username": "abc",
+  "password": "123"
+}
+```
+
+Returns:
+
+```json
+{
+  "token": "...JWT...",
+  "username": "abc"
+}
+```
+
+Token encodes `{ username }`.
+Used via `Authorization: Bearer <token>`.
 
 ---
 
-## 🟩 Controllers — `itemController.js`
+## **5.2 Item Routes (`/items`)**
 
-### **GET /items**
+### `GET /items`
 
 Returns all items.
 
-### **GET /items/:id**
+---
 
-Returns a single item, including all embedded reviews.
+### `GET /items/:id`
 
-### **POST /items**
-
-Creates a new item.
-
-### **POST /items/:id/review**
-
-Adds a review:
-
-* Writes username, rating, and review
-* Generates judgement object through `analyzeReview()`
-* Pushes into Item.reviews[]
-* Recalculates averageRating
+Returns full item + embedded reviews.
 
 ---
 
-## 🟩 Routes — `itemRoutes.js`
+### `POST /items`
 
-```
-GET    /items
-GET    /items/:id
-POST   /items
-POST   /items/:id/review
-```
+Create a new item.
 
-There is **NO** separate `reviewRoutes.js`.
-Everything is nested under `/items`.
+Body:
 
----
-
-# 🎨 **Frontend Logic Overview**
-
-## 🟢 Username Flow
-
-On first page load:
-
-* App checks localStorage for `username`
-* If missing → show EnterUsername.jsx
-* After entering username, store it and proceed
-
-No authentication or sessions needed.
-
----
-
-## 🟢 ItemDetails.jsx
-
-When a user opens an item:
-
-* Fetches the item via `/items/:id`
-* Displays item name, category, average rating
-* Shows a review form:
-
-  * Star selection component
-  * Textbox
-  * Submit button
-* Submits review to `/items/:id/review`
-* Reloads updated item with new reviews + judgement
-* Reviews list displays:
-
-  * username
-  * star rating
-  * review text
-  * judgement text + tags
-
----
-
-## 🟢 AddItem.jsx
-
-Allows creation of new items using:
-
-```
-POST /items
+```json
+{
+  "name": "...",
+  "category": "..."
+}
 ```
 
 ---
 
-## 🟢 Home.jsx
+### `POST /items/:id/review` (Authenticated)
 
-Displays a list of all existing items.
+Body:
+
+```json
+{
+  "username": "abc",
+  "rating": 5,
+  "review": "Great stuff"
+}
+```
+
+Backend:
+
+* Adds review inside document
+* Passes review through the Judgement Engine
+* Updates `averageRating`
 
 ---
 
-# 🔐 **Environment Variables**
+### Planned:
 
-`.env.example`:
+### `DELETE /items/:itemId/review/:reviewId`
+
+Allow users to delete their own reviews (uses `auth` middleware).
+
+---
+
+# 🟦 **6. Middleware**
+
+### **auth.js**
+
+Reads `Authorization: Bearer <token>` header.
+
+Decoded into:
+
+```
+req.user = { username: ... }
+```
+
+Used for authenticated routes.
+
+---
+
+# 🟩 **7. Frontend Overview**
+
+## **7.1 AuthContext**
+
+Holds:
+
+```js
+user          // username
+login()       // save token + user
+logout()      // remove token + user
+```
+
+Tokens stored in `localStorage.token`.
+
+---
+
+## **7.2 Axios Interceptor**
+
+(`axiosClient.js`)
+
+Automatically attaches the token:
+
+```js
+Authorization: Bearer <token>
+```
+
+Used by all API functions.
+
+---
+
+## **7.3 Login + Register pages**
+
+* Register → POST `/auth/register`
+* Login → POST `/auth/login`
+* On login, save `{token, username}` via context
+
+---
+
+## **7.4 Protected Routes**
+
+`PrivateRoute.jsx`:
+
+* Redirects to `/login` if no user is logged in
+* Wraps Home, AddItem, ItemDetails
+
+Example from `App.jsx`:
+
+```jsx
+<Route
+  path="/item/:id"
+  element={
+    <PrivateRoute>
+      <ItemDetails />
+    </PrivateRoute>
+  }
+/>
+```
+
+---
+
+## **7.5 Navbar**
+
+* Shows Add Item
+* Shows “Logged in as X”
+* Logout button clears token + user
+
+---
+
+
+# 🟦 **9. Environment Variables (`.env.example`)**
 
 ```
 MONGO_URI=mongodb://127.0.0.1:27017/
 PORT=5000
+JWT_SECRET=your_secret_here
 ```
 
-Developers create their own `.env` locally.
+No dev-specific instructions — teammate sets these independently.
 
 ---
 
-# 💡 **Developer Rules & Notes**
+# 🟪 **10. Development Notes**
 
-### ✔ No review collection — embedded reviews only
+* **Reviews are embedded inside items**, not in a separate collection
+* **Auth does NOT yet enforce ownership on reviews** (but backend ready for upgrade)
+* **Judgement Engine is synchronous** and lightweight
+* No external API dependencies
+* No build/bundle configuration needed for teammates
 
-### ✔ No separate review routes — they live under `/items/:id/review`
-
-### ✔ No authentication — username stored locally
-
-### ✔ Do NOT move the Judgement Engine into index.js
-
-### ✔ Keep backend modular:
-
-* routes → controllers → models → utils → db
-
-### ✔ MongoDB names are flexible, the URI decides the DB
