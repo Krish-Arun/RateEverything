@@ -41,20 +41,20 @@ export default function ItemDetails() {
   if (!item) return <div className="p-6 text-white">Loading...</div>;
 
   return (
-    <div className="relative min-h-screen w-full text-white overflow-hidden !mt-0 !pt-0">
-
-      {/* BACKGROUND PARTICLES + BLUR */}
-      <div className="absolute inset-0 -z-10 backdrop-blur-3xl">
+    <div className="relative w-full min-h-screen text-white overflow-hidden">
+    
+      {/* Particle Background */}
+      <div className="absolute inset-0 -z-10 w-full h-full pointer-events-none">
         <Particles
           particleColors={["#ffffff"]}
           particleCount={200}
           particleSpread={10}
-          speed={0.12}
+          speed={0.1}
           particleBaseSize={110}
           moveParticlesOnHover={true}
           alphaParticles={false}
           disableRotation={false}
-          className="absolute inset-0"
+          className="w-full h-full"
         />
       </div>
 
